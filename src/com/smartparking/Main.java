@@ -51,6 +51,7 @@ import com.smartparking.service.TicketService;
 import com.smartparking.service.UserService;
 import com.smartparking.service.VehicleService;
 
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Scanner;
 
@@ -81,8 +82,9 @@ public class Main {
         SubscriptionService subscriptionService = new SubscriptionService(subscriptionRepository);
         PaymentService paymentService = new PaymentService(paymentRepository);
         NotificationChannel notificationChannel = new ConsoleNotification();
-        TicketService ticketService = new TicketService(ticketRepository, parkingSlotService, paymentService, notificationChannel);
         EVChargingService evChargingService = new EVChargingService(paymentService);
+        TicketService ticketService = new TicketService(ticketRepository, parkingSlotService, paymentService,
+                notificationChannel, evChargingService);
 
         seedSlots(parkingSlotService);
 
@@ -345,23 +347,22 @@ public class Main {
     }
 
     private static VehicleType readVehicleType(Scanner scanner) {
-        while (true) {
-            String line = readLine(scanner, "Vehicle type (CAR/BIKE/TRUCK): ").toUpperCase();
-            try {
-                return VehicleType.valueOf(line);
-            } catch (IllegalArgumentException e) {
-                System.out.println("Please enter CAR, BIKE, or TRUCK.");
-            }
-        }
+        return readEnum(scanner, "Vehicle type", VehicleType.class);
     }
 
     private static SlotType readSlotType(Scanner scanner) {
+        return readEnum(scanner, "Slot type", SlotType.class);
+    }
+
+    private static <E extends Enum<E>> E readEnum(Scanner scanner, String label, Class<E> enumClass) {
+        E[] values = enumClass.getEnumConstants();
+        String optionsLabel = String.join("/", Arrays.stream(values).map(Enum::name).toArray(String[]::new));
         while (true) {
-            String line = readLine(scanner, "Slot type (CAR/BIKE/TRUCK): ").toUpperCase();
+            String line = readLine(scanner, label + " (" + optionsLabel + "): ").toUpperCase();
             try {
-                return SlotType.valueOf(line);
+                return Enum.valueOf(enumClass, line);
             } catch (IllegalArgumentException e) {
-                System.out.println("Please enter CAR, BIKE, or TRUCK.");
+                System.out.println("Please enter one of: " + optionsLabel);
             }
         }
     }

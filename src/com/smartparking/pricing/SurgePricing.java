@@ -28,7 +28,13 @@ public class SurgePricing implements PricingStrategy {
         double baseFee = base.calculateFee(ticket);
         LocalDateTime checkoutTime = ticket.getExitTime() != null ? ticket.getExitTime() : LocalDateTime.now();
         int hour = checkoutTime.getHour();
-        boolean isPeak = hour >= peakStartHour && hour < peakEndHour;
+        // peakStartHour <= peakEndHour is a same-day window (e.g. 9-17): peak iff hour is between
+        // them. peakStartHour > peakEndHour is an overnight window that wraps past midnight (e.g.
+        // 22-6): peak iff hour is at/after start OR before end, since no single hour value can
+        // satisfy "between 22 and 6" under the same-day comparison.
+        boolean isPeak = peakStartHour <= peakEndHour
+                ? (hour >= peakStartHour && hour < peakEndHour)
+                : (hour >= peakStartHour || hour < peakEndHour);
         return isPeak ? baseFee * multiplier : baseFee;
     }
 }

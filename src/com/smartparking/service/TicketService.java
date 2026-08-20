@@ -24,13 +24,21 @@ public class TicketService {
     private final ParkingSlotService parkingSlotService;
     private final PaymentService paymentService;
     private final NotificationChannel notificationChannel;
+    private final EVChargingService evChargingService;
+
+    // Guards the "does this vehicle already have an open ticket" check together with the
+    // save that follows it — same check-then-act race as ReservationService.bookingLock,
+    // just for walk-in/confirmed check-ins instead of reservations.
+    private final Object checkInLock = new Object();
 
     public TicketService(TicketRepository ticketRepository, ParkingSlotService parkingSlotService,
-                          PaymentService paymentService, NotificationChannel notificationChannel) {
+                          PaymentService paymentService, NotificationChannel notificationChannel,
+                          EVChargingService evChargingService) {
         this.ticketRepository = ticketRepository;
         this.parkingSlotService = parkingSlotService;
         this.paymentService = paymentService;
         this.notificationChannel = notificationChannel;
+        this.evChargingService = evChargingService;
     }
 
     public Optional<Ticket> getTicket(Long id) {
@@ -38,12 +46,14 @@ public class TicketService {
     }
 
     public Ticket checkIn(Vehicle vehicle, ParkingSlot slot) {
-        ticketRepository.findOpenByVehicleId(vehicle.getId()).ifPresent(existing -> {
-            throw new DuplicateBookingException(
-                    "Vehicle " + vehicle.getLicensePlate() + " already has an open ticket (id=" + existing.getId() + ")");
-        });
-        Ticket ticket = new Ticket(vehicle.getId(), slot.getId(), LocalDateTime.now());
-        return ticketRepository.save(ticket);
+        synchronized (checkInLock) {
+            ticketRepository.findOpenByVehicleId(vehicle.getId()).ifPresent(existing -> {
+                throw new DuplicateBookingException(
+                        "Vehicle " + vehicle.getLicensePlate() + " already has an open ticket (id=" + existing.getId() + ")");
+            });
+            Ticket ticket = new Ticket(vehicle.getId(), slot.getId(), LocalDateTime.now());
+            return ticketRepository.save(ticket);
+        }
     }
 
     public CheckoutReceipt checkOut(Long ticketId, PricingStrategy pricingStrategy, PaymentMethod paymentMethod, User user) {
@@ -51,6 +61,10 @@ public class TicketService {
                 .orElseThrow(() -> new IllegalArgumentException("No ticket with id " + ticketId));
         if (!ticket.isOpen()) {
             throw new IllegalStateException("Ticket " + ticketId + " is already closed");
+        }
+        if (evChargingService.isCharging(ticket.getSlotId())) {
+            throw new IllegalStateException(
+                    "Slot " + ticket.getSlotId() + " is still charging — stop EV charging before checking out");
         }
 
         // exitTime must be set BEFORE calculateFee runs: pricing strategies measure duration up

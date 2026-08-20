@@ -70,7 +70,9 @@ The double-booking race condition (find an available slot, then mark it claimed 
 read-then-write pair that a `ConcurrentHashMap` alone doesn't make atomic) is fixed with a
 `synchronized` block around the whole find-then-claim sequence in `ParkingSlotService`, on a
 single shared lock object. Verified with 50 threads racing for one free slot: exactly 1
-success, 49 correctly rejected.
+success, 49 correctly rejected. The same check-then-act shape exists one layer up too — "does
+this vehicle already have an active reservation/open ticket" followed by saving one — and is
+fixed the same way, with a dedicated lock in `ReservationService` and `TicketService`.
 
 ## Requirements
 

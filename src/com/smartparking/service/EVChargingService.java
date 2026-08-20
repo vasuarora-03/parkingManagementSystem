@@ -45,6 +45,15 @@ public class EVChargingService {
         }
         session.stopCharging();
         session.interrupt(); // wake it immediately instead of waiting out its current sleep tick
+        try {
+            // Wait for the thread to actually exit its run loop before reading chargePercent --
+            // without this, run() can still be mid-tick (sleep() woke from the interrupt, but
+            // the percent write hasn't landed yet), making the billed fee racy against the
+            // background thread's own scheduling.
+            session.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
 
         double fee = session.getChargePercent() * RATE_PER_PERCENT;
         return paymentService.pay(ticketId, fee, paymentMethod);
@@ -53,5 +62,9 @@ public class EVChargingService {
     public int getChargePercent(Long slotId) {
         EVChargingSession session = activeSessions.get(slotId);
         return session != null ? session.getChargePercent() : 0;
+    }
+
+    public boolean isCharging(Long slotId) {
+        return activeSessions.containsKey(slotId);
     }
 }

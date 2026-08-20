@@ -23,6 +23,13 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final ParkingSlotService parkingSlotService;
 
+    // Guards the "does this vehicle already have an active reservation" check together with
+    // the claim+save that follows it, so the two can't interleave across threads the same way
+    // ParkingSlotService.allocationLock protects slot claiming (see that class's comment).
+    // Without this, two concurrent reserve() calls for the same vehicle can both pass the
+    // duplicate check before either has saved a Reservation.
+    private final Object bookingLock = new Object();
+
     public ReservationService(ReservationRepository reservationRepository, ParkingSlotService parkingSlotService) {
         this.reservationRepository = reservationRepository;
         this.parkingSlotService = parkingSlotService;
@@ -30,17 +37,19 @@ public class ReservationService {
 
     /** Holds a slot of the given type for the vehicle for holdMinutes, before the vehicle has arrived. */
     public Reservation reserve(Vehicle vehicle, SlotType slotType, int holdMinutes) {
-        reservationRepository.findActiveByVehicleId(vehicle.getId()).ifPresent(existing -> {
-            throw new DuplicateBookingException(
-                    "Vehicle " + vehicle.getLicensePlate() + " already has an active reservation (id=" + existing.getId() + ")");
-        });
+        synchronized (bookingLock) {
+            reservationRepository.findActiveByVehicleId(vehicle.getId()).ifPresent(existing -> {
+                throw new DuplicateBookingException(
+                        "Vehicle " + vehicle.getLicensePlate() + " already has an active reservation (id=" + existing.getId() + ")");
+            });
 
-        // Atomic claim happens inside ParkingSlotService — by the time this returns, the slot is ours alone.
-        ParkingSlot slot = parkingSlotService.reserveSlot(vehicle, slotType);
+            // Atomic claim happens inside ParkingSlotService — by the time this returns, the slot is ours alone.
+            ParkingSlot slot = parkingSlotService.reserveSlot(vehicle, slotType);
 
-        LocalDateTime now = LocalDateTime.now();
-        Reservation reservation = new Reservation(vehicle.getId(), slot.getId(), now, now.plusMinutes(holdMinutes));
-        return reservationRepository.save(reservation);
+            LocalDateTime now = LocalDateTime.now();
+            Reservation reservation = new Reservation(vehicle.getId(), slot.getId(), now, now.plusMinutes(holdMinutes));
+            return reservationRepository.save(reservation);
+        }
     }
 
     /** Called when the vehicle actually arrives: turns the hold into a real occupancy. */
