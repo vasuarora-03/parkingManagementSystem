@@ -1,0 +1,34 @@
+# Compiled output
+out/
+bin/
+build/
+target/
+*.class
+
+# Build tool wrapper/cache (in case Maven/Gradle gets added later)
+.mvn/
+.gradle/
+
+# Helper file mentioned in README's Windows build steps
+sources.txt
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Docs kept local only, not published to GitHub
+INTERVIEW_GUIDE.md
+INTERVIEW_GUIDE.pdf
+smart_parking_design_spec.md
