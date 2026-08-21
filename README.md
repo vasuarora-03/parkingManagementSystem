@@ -77,27 +77,37 @@ fixed the same way, with a dedicated lock in `ReservationService` and `TicketSer
 ## Requirements
 
 - JDK 17+ (built and tested against JDK 21)
-- No external dependencies, no build tool required — just `javac`/`java`
+- Maven (only needed to run the test suite — JUnit 5 is a test-scope dependency, the app
+  itself still has zero runtime dependencies)
 
 ## How to run
 
 From the project root:
 
 ```bash
-# Compile everything into out/
-javac -d out $(find src -name "*.java")
+mvn compile exec:java -Dexec.mainClass=com.smartparking.Main
+# or, without the exec plugin:
+mvn package
+java -jar target/smart-parking-management-system-1.0.0.jar
+```
 
-# Run the CLI
+Without Maven, plain `javac`/`java` still works against the same source layout:
+
+```bash
+javac -d out $(find src/main/java -name "*.java")
 java -cp out com.smartparking.Main
 ```
 
-On Windows PowerShell, the compile step is:
+## Tests
 
-```powershell
-Get-ChildItem -Recurse -Filter *.java src | ForEach-Object { $_.FullName } | Out-File sources.txt -Encoding utf8
-javac -d out "@sources.txt"
-java -cp out com.smartparking.Main
+```bash
+mvn test
 ```
+
+`ParkingSlotServiceTest` reproduces the double-booking race directly: 50 threads racing for
+one free slot via a real `ExecutorService`, asserting exactly 1 success and 49 rejections —
+turning the "verified with 50 threads" claim below into something that actually runs in CI,
+not just a comment.
 
 The lot is seeded at startup with 6 slots (3 car — one with an EV charger, 2 bike, 1 truck).
 IDs (vehicle, user, reservation, ticket, slot) are auto-generated and printed after each
